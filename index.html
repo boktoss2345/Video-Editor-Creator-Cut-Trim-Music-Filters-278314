@@ -529,6 +529,8 @@
     .stage::after { border-color: rgba(255, 219, 148, .18); }
     .stage-empty strong { color: #f1e7ff; }
     .preview-text.selected { outline-color: #ffcc58; }
+    #previewVideo, #previewImage { cursor: grab; touch-action: none; }
+    .stage.is-dragging #previewVideo, .stage.is-dragging #previewImage { cursor: grabbing; }
     .stage-zoom-controls {
       position: absolute;
       z-index: 8;
@@ -1017,6 +1019,7 @@
       if (!files.length) return;
       var rejected = 0;
       var imported = 0;
+      var firstImportedVideoId = null;
       for (var i = 0; i < files.length; i++) {
         var file = files[i];
         if (!isFileOfType(file, expected)) {
@@ -1026,8 +1029,9 @@
         var url = URL.createObjectURL(file);
         try {
           var metadata = await loadMetadata(url, expected);
+          var mediaId = uid("media");
           project.media.push({
-            id: uid("media"),
+            id: mediaId,
             type: expected,
             name: file.name,
             url: url,
@@ -1035,6 +1039,7 @@
             width: metadata.width || 0,
             height: metadata.height || 0
           });
+          if (expected === "video" && !firstImportedVideoId) firstImportedVideoId = mediaId;
           imported++;
         } catch (error) {
           URL.revokeObjectURL(url);
@@ -1045,6 +1050,7 @@
       if (imported) {
         commit();
         renderAll();
+        if (firstImportedVideoId && !activeClipId) previewMedia(firstImportedVideoId);
         showStatus(imported + " asset" + (imported === 1 ? "" : "s") + " added locally." + (rejected ? " Some files were skipped." : ""), "success");
       } else if (rejected) {
         showStatus("No compatible assets were added. Check the file format.", "error");
@@ -1112,7 +1118,9 @@
         flipH: false,
         flipV: false,
         scale: 1,
-        opacity: 1
+        opacity: 1,
+        offsetX: 0,
+        offsetY: 0
       };
       project.clips.push(clip);
       activeClipId = clip.id;
@@ -1268,7 +1276,9 @@
       var flipX = clip && clip.flipH ? -1 : 1;
       var flipY = clip && clip.flipV ? -1 : 1;
       var opacity = clip ? (clip.opacity == null ? 1 : clip.opacity) : 1;
-      target.style.transform = "rotate(" + rotation + "deg) scale(" + scale + ") scaleX(" + flipX + ") scaleY(" + flipY + ")";
+      var offsetX = clip && isFinite(clip.offsetX) ? clip.offsetX : 0;
+      var offsetY = clip && isFinite(clip.offsetY) ? clip.offsetY : 0;
+      target.style.transform = "translate(" + offsetX + "%, " + offsetY + "%) rotate(" + rotation + "deg) scale(" + scale + ") scaleX(" + flipX + ") scaleY(" + flipY + ")";
       target.style.filter = getCssFilter();
       target.style.opacity = opacity;
     }
@@ -1543,6 +1553,67 @@
       updateClip(clip, { scale: nextScale }, "Canvas zoom set to " + Math.round(nextScale * 100) + "%.");
     }
 
+    function bindStageDrag() {
+      var drag = null;
+
+      function start(clientX, clientY, target) {
+        if (target && target.closest && target.closest(".stage-zoom-controls")) return false;
+        var clip = getClip(activeClipId);
+        var hasVisual = previewVideo.classList.contains("is-visible") || previewImage.classList.contains("is-visible");
+        if (!clip || clip.type === "audio" || !hasVisual) return false;
+        drag = {
+          clip: clip,
+          startX: clientX,
+          startY: clientY,
+          originX: isFinite(clip.offsetX) ? clip.offsetX : 0,
+          originY: isFinite(clip.offsetY) ? clip.offsetY : 0,
+          moved: false
+        };
+        stage.classList.add("is-dragging");
+        return true;
+      }
+
+      function move(clientX, clientY) {
+        if (!drag) return false;
+        var bounds = stage.getBoundingClientRect();
+        if (!bounds.width || !bounds.height) return false;
+        var nextX = Math.max(-100, Math.min(100, drag.originX + (clientX - drag.startX) / bounds.width * 100));
+        var nextY = Math.max(-100, Math.min(100, drag.originY + (clientY - drag.startY) / bounds.height * 100));
+        drag.moved = drag.moved || Math.abs(nextX - drag.originX) > .2 || Math.abs(nextY - drag.originY) > .2;
+        drag.clip.offsetX = round(nextX, 2);
+        drag.clip.offsetY = round(nextY, 2);
+        applyVisualStyle(drag.clip);
+        return true;
+      }
+
+      function finish() {
+        if (!drag) return;
+        var completedDrag = drag;
+        drag = null;
+        stage.classList.remove("is-dragging");
+        if (!completedDrag.moved) return;
+        commit();
+        renderTransformTools();
+        showStatus("Position updated. Drag again to move it further.", "success");
+      }
+
+      stage.addEventListener("mousedown", function (event) {
+        if (start(event.clientX, event.clientY, event.target)) event.preventDefault();
+      });
+      window.addEventListener("mousemove", function (event) {
+        if (move(event.clientX, event.clientY)) event.preventDefault();
+      });
+      window.addEventListener("mouseup", finish);
+      stage.addEventListener("touchstart", function (event) {
+        if (event.touches.length && start(event.touches[0].clientX, event.touches[0].clientY, event.target)) event.preventDefault();
+      }, { passive: false });
+      stage.addEventListener("touchmove", function (event) {
+        if (event.touches.length && move(event.touches[0].clientX, event.touches[0].clientY)) event.preventDefault();
+      }, { passive: false });
+      stage.addEventListener("touchend", finish);
+      stage.addEventListener("touchcancel", finish);
+    }
+
     function splitSelected() {
       var clip = getClip(activeClipId);
       if (!clip || clip.type === "image") {
@@ -1752,7 +1823,9 @@
       transformTools.innerHTML = '<div class="control-grid">' +
         rangeControl("transformZoom", "Zoom", clip.scale || 1, .25, 3, .01, "×", 1) +
         rangeControl("transformOpacity", "Opacity", clip.opacity == null ? 1 : clip.opacity, 0, 1, .01, "%", 100) +
-        '</div><div class="tool-actions"><button type="button" data-transform="left">Turn -90°</button><button type="button" data-transform="right">Turn 90°</button><button type="button" data-transform="flipH">Mirror horizontal</button><button type="button" data-transform="flipV">Mirror vertical</button><button type="button" data-transform="fit">Fit inside</button><button type="button" data-transform="fill">Fill frame</button></div>';
+        rangeControl("transformX", "Horizontal move", isFinite(clip.offsetX) ? clip.offsetX : 0, -100, 100, 1, "%", 1) +
+        rangeControl("transformY", "Vertical move", isFinite(clip.offsetY) ? clip.offsetY : 0, -100, 100, 1, "%", 1) +
+        '</div><div class="tool-actions"><button type="button" data-transform="left">Turn -90°</button><button type="button" data-transform="right">Turn 90°</button><button type="button" data-transform="flipH">Mirror horizontal</button><button type="button" data-transform="flipV">Mirror vertical</button><button type="button" data-transform="fit">Fit inside</button><button type="button" data-transform="fill">Fill frame</button><button type="button" data-transform="center">Reset position</button></div>';
     }
 
     function renderAll() {
@@ -2024,6 +2097,16 @@
           updateRangeOutput("transformOpacity", Math.round(clip.opacity * 100) + "%");
           applyVisualStyle(clip);
         }
+        if (event.target.id === "transformX") {
+          clip.offsetX = Number(event.target.value);
+          updateRangeOutput("transformX", Math.round(clip.offsetX) + "%");
+          applyVisualStyle(clip);
+        }
+        if (event.target.id === "transformY") {
+          clip.offsetY = Number(event.target.value);
+          updateRangeOutput("transformY", Math.round(clip.offsetY) + "%");
+          applyVisualStyle(clip);
+        }
       });
       transformTools.addEventListener("change", function () { commit(); });
       transformTools.addEventListener("click", function (event) {
@@ -2037,6 +2120,7 @@
         if (action === "flipV") clip.flipV = !clip.flipV;
         if (action === "fit") clip.scale = 1;
         if (action === "fill") clip.scale = 1.28;
+        if (action === "center") { clip.offsetX = 0; clip.offsetY = 0; }
         commit();
         renderTransformTools();
         applyVisualStyle(clip);
@@ -2054,7 +2138,9 @@
       var width = sourceWidth * fit;
       var height = sourceHeight * fit;
       var scale = clip.scale || 1;
-      ctx.translate(canvas.width / 2, canvas.height / 2);
+      var offsetX = isFinite(clip.offsetX) ? clip.offsetX : 0;
+      var offsetY = isFinite(clip.offsetY) ? clip.offsetY : 0;
+      ctx.translate(canvas.width / 2 + canvas.width * offsetX / 100, canvas.height / 2 + canvas.height * offsetY / 100);
       ctx.rotate((clip.rotation || 0) * Math.PI / 180);
       ctx.scale((clip.flipH ? -1 : 1) * scale, (clip.flipV ? -1 : 1) * scale);
       ctx.globalAlpha = clip.opacity == null ? 1 : clip.opacity;
@@ -2263,6 +2349,7 @@
       bindFilterTools();
       bindAdjustTools();
       bindTransformTools();
+      bindStageDrag();
     }
 
     bindEvents();
