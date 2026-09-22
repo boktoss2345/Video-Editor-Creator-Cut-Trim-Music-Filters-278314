@@ -777,6 +777,7 @@
     </div>
   </main>
   <div id="status" class="status" role="status" aria-live="polite"></div>
+  <input id="projectImportInput" class="screen-reader" type="file" accept="application/json,.json,text/plain" tabindex="-1" aria-hidden="true">
 
   <script>
   (function () {
@@ -809,6 +810,7 @@
     var playhead = document.getElementById("playhead");
     var timelineNote = document.getElementById("timelineNote");
     var statusBox = document.getElementById("status");
+    var projectImportInput = document.getElementById("projectImportInput");
     var activeTab = "media";
     var activeClipId = null;
     var activeTextId = null;
@@ -864,6 +866,179 @@
       var p = Math.pow(10, digits || 2);
       return Math.round(value * p) / p;
     }
+
+    /* ─────────────────────────────────────────────────────────────────────
+       Android WebView safe FILE IMPORT / EXPORT helpers.
+       These helpers do not change any editor behaviour. They only replace
+       the plain "<a download>" step (which many Android WebViews ignore)
+       with a chain of fallbacks so that Export / Save session really
+       produce a file on the device.
+
+       OPTIONAL NATIVE BRIDGE
+       ----------------------
+       If the host WebView cannot save Blob URLs at all, expose a
+       JavascriptInterface named exactly "AndroidBridge" that contains:
+
+           @JavascriptInterface
+           public boolean saveBase64File(String base64, String mimeType, String fileName)
+
+       Register it with:
+           webView.addJavascriptInterface(new AndroidBridge(), "AndroidBridge");
+
+       The method must decode the Base64 payload and write it into the
+       public Downloads folder (or any app-private folder it prefers),
+       then return true on success, false on failure.
+       The page also looks for the same method on window.Android,
+       window.AndroidInterface, window.NativeBridge and window.AndroidFileSaver.
+       ───────────────────────────────────────────────────────────────────── */
+
+    var ANDROID_SAVER_METHODS = ["saveBase64File", "saveFileBase64", "downloadBase64File"];
+
+    function findAndroidFileSaver() {
+      var bridges = [window.AndroidBridge, window.Android, window.AndroidInterface, window.NativeBridge, window.AndroidFileSaver];
+      for (var i = 0; i < bridges.length; i++) {
+        var bridge = bridges[i];
+        if (!bridge) continue;
+        for (var j = 0; j < ANDROID_SAVER_METHODS.length; j++) {
+          var methodName = ANDROID_SAVER_METHODS[j];
+          try {
+            if (typeof bridge[methodName] === "function") {
+              return { bridge: bridge, method: methodName };
+            }
+          } catch (error) { /* some WebViews throw while reading bridge properties */ }
+        }
+      }
+      return null;
+    }
+
+    function createObjectUrl(blob) {
+      try {
+        var api = window.URL || window.webkitURL;
+        if (api && typeof api.createObjectURL === "function") return api.createObjectURL(blob);
+      } catch (error) { /* ignore */ }
+      return null;
+    }
+
+    function revokeObjectUrl(url) {
+      try {
+        var api = window.URL || window.webkitURL;
+        if (api && typeof api.revokeObjectURL === "function") api.revokeObjectURL(url);
+      } catch (error) { /* ignore */ }
+    }
+
+    function clickDownloadLink(href, fileName) {
+      try {
+        var link = document.createElement("a");
+        if (typeof link.download === "undefined") return false;
+        link.href = href;
+        link.download = fileName;
+        link.rel = "noopener";
+        link.style.position = "absolute";
+        link.style.left = "-9999px";
+        link.style.top = "0";
+        document.body.appendChild(link);
+        link.click();
+        window.setTimeout(function () {
+          if (link.parentNode) link.parentNode.removeChild(link);
+        }, 2000);
+        return true;
+      } catch (error) {
+        return false;
+      }
+    }
+
+    function blobToDataUrl(blob, callback) {
+      if (!window.FileReader) { callback(""); return; }
+      try {
+        var reader = new FileReader();
+        reader.onload = function () { callback(String(reader.result == null ? "" : reader.result)); };
+        reader.onerror = function () { callback(""); };
+        reader.readAsDataURL(blob);
+      } catch (error) {
+        callback("");
+      }
+    }
+
+    function blobToBase64(blob, callback) {
+      blobToDataUrl(blob, function (dataUrl) {
+        if (!dataUrl) { callback(""); return; }
+        var comma = dataUrl.indexOf(",");
+        callback(comma >= 0 ? dataUrl.slice(comma + 1) : dataUrl);
+      });
+    }
+
+    function timestampSlug() {
+      var now = new Date();
+      function pad(value) { return (value < 10 ? "0" : "") + value; }
+      return now.getFullYear() + pad(now.getMonth() + 1) + pad(now.getDate()) +
+        "-" + pad(now.getHours()) + pad(now.getMinutes()) + pad(now.getSeconds());
+    }
+
+    /**
+     * Saves a Blob to the device. Tries, in order:
+     *   1. the optional Android JavascriptInterface
+     *   2. navigator.msSaveBlob (legacy WebView / IE)
+     *   3. an object URL plus <a download>
+     *   4. a data URL plus <a download>
+     * Never navigates away from the app and never opens a blank page.
+     */
+    function saveBlobToDevice(blob, fileName, mimeType, callback) {
+      var report = function (saved, note) {
+        if (typeof callback === "function") callback(saved, note || "");
+      };
+      mimeType = mimeType || blob.type || "application/octet-stream";
+
+      var saver = findAndroidFileSaver();
+      if (saver) {
+        blobToBase64(blob, function (base64) {
+          if (!base64) {
+            report(false, "The export could not be encoded for the host app.");
+            return;
+          }
+          var result = false;
+          try {
+            result = saver.bridge[saver.method](base64, mimeType, fileName);
+          } catch (error) {
+            result = false;
+          }
+          if (result === false) {
+            report(false, "The host app could not write the export file.");
+          } else {
+            report(true, "Saved by the host app.");
+          }
+        });
+        return;
+      }
+
+      var navigatorRef = window.navigator || {};
+      if (typeof navigatorRef.msSaveBlob === "function") {
+        try {
+          navigatorRef.msSaveBlob(blob, fileName);
+          report(true, "Saved to the device.");
+          return;
+        } catch (error) { /* fall through to the next strategy */ }
+      }
+
+      var objectUrl = createObjectUrl(blob);
+      if (objectUrl) {
+        if (clickDownloadLink(objectUrl, fileName)) {
+          window.setTimeout(function () { revokeObjectUrl(objectUrl); }, 60000);
+          report(true, "Downloaded.");
+          return;
+        }
+        revokeObjectUrl(objectUrl);
+      }
+
+      blobToDataUrl(blob, function (dataUrl) {
+        if (dataUrl && clickDownloadLink(dataUrl, fileName)) {
+          report(true, "Downloaded.");
+          return;
+        }
+        report(false, "This WebView cannot save files by itself. Add an AndroidBridge.saveBase64File JavascriptInterface (see the comment in the page source) to enable saving.");
+      });
+    }
+
+    /* ── end of Android WebView file helpers ── */
 
     function getMedia(id) {
       return project.media.find(function (item) { return item.id === id; }) || null;
@@ -1896,47 +2071,168 @@
       if (output) output.textContent = text;
     }
 
-    function saveProject() {
+    /* ── Project data export / import ─────────────────────────────────── */
+
+    function buildProjectSnapshot() {
       var clean = copy(project);
       clean.media = clean.media.map(function (media) {
-        delete media.url;
-        return media;
+        var item = copy(media);
+        delete item.url;
+        return item;
       });
+      clean.app = "Cutroom";
+      clean.version = 1;
+      clean.exportedAt = new Date().toISOString();
+      return clean;
+    }
+
+    function isValidProjectData(data) {
+      return !!data && typeof data === "object" && Array.isArray(data.media) && Array.isArray(data.clips);
+    }
+
+    function exportProjectFile(snapshot) {
+      var data = snapshot || buildProjectSnapshot();
+      var blob = null;
+      try {
+        blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      } catch (error) {
+        showStatus("This browser cannot build an export file.", "error");
+        return;
+      }
+      var name = "cutroom-project-" + timestampSlug() + ".json";
+      saveBlobToDevice(blob, name, "application/json", function (saved, note) {
+        if (saved) showStatus("Project exported as " + name + ".", "success");
+        else showStatus(note || "The project file could not be saved on this device.", "error");
+      });
+    }
+
+    function saveProject() {
+      var clean = buildProjectSnapshot();
       try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(clean));
-        showStatus("Project metadata saved on this device. Source files are not copied.", "success");
       } catch (error) {
-        showStatus("The project could not be saved in this browser storage.", "error");
+        /* Browser storage can be unavailable inside some WebViews.
+           The file export below still gives the user a portable copy. */
       }
+      exportProjectFile(clean);
+    }
+
+    function applyLoadedProject(saved) {
+      var available = project.media.slice();
+      project = saved;
+      project.media = (saved.media || []).map(function (metadata) {
+        var matching = available.find(function (current) { return current.name === metadata.name && current.type === metadata.type; });
+        return Object.assign({}, metadata, { url: matching ? matching.url : null });
+      });
+      project.clips = Array.isArray(saved.clips) ? saved.clips : [];
+      project.filters = Object.assign(freshProject().filters, project.filters || {});
+      project.adjust = Object.assign(freshProject().adjust, project.adjust || {});
+      project.overlays = Array.isArray(project.overlays) ? project.overlays : [];
+      activeClipId = null;
+      activeTextId = null;
+      playheadTime = 0;
+      stopPlayback();
+      commit();
+      renderAll();
+      return project.media.filter(function (item) { return !item.url; }).length;
     }
 
     function loadProject() {
-      var raw = localStorage.getItem(STORAGE_KEY);
+      var raw = null;
+      try { raw = localStorage.getItem(STORAGE_KEY); } catch (error) { raw = null; }
       if (!raw) {
         showStatus("No saved project metadata was found on this device.", "error");
         return;
       }
       try {
         var saved = JSON.parse(raw);
-        if (!saved || !Array.isArray(saved.media) || !Array.isArray(saved.clips)) throw new Error("Invalid project data");
-        var available = project.media.slice();
-        project = saved;
-        project.media = saved.media.map(function (metadata) {
-          var matching = available.find(function (current) { return current.name === metadata.name && current.type === metadata.type; });
-          return Object.assign({}, metadata, { url: matching ? matching.url : null });
-        });
-        project.filters = Object.assign(freshProject().filters, project.filters || {});
-        project.adjust = Object.assign(freshProject().adjust, project.adjust || {});
-        project.overlays = project.overlays || [];
-        activeClipId = null;
-        activeTextId = null;
-        playheadTime = 0;
-        commit();
-        renderAll();
-        var missing = project.media.filter(function (item) { return !item.url; }).length;
+        if (!isValidProjectData(saved)) throw new Error("Invalid project data");
+        var missing = applyLoadedProject(saved);
         showStatus(missing ? "Project loaded. Re-import " + missing + " original file" + (missing === 1 ? "" : "s") + " to make those clips available." : "Project loaded with currently available source files.", missing ? "error" : "success");
       } catch (error) {
         showStatus("Saved project data could not be loaded.", "error");
+      }
+    }
+
+    function importProjectFile(file) {
+      if (!file) return;
+      if (!window.FileReader) {
+        showStatus("This browser cannot read the selected file.", "error");
+        return;
+      }
+      var reader = new FileReader();
+      reader.onload = function () {
+        var text = String(reader.result == null ? "" : reader.result);
+        if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+        var data = null;
+        try { data = JSON.parse(text); } catch (error) { data = null; }
+        if (!isValidProjectData(data)) {
+          showStatus("That file is not a valid project export.", "error");
+          return;
+        }
+        try {
+          var missing = applyLoadedProject(data);
+          showStatus(missing ? "Project imported. Re-import " + missing + " original file" + (missing === 1 ? "" : "s") + " to make those clips available." : "Project imported from " + (file.name || "the selected file") + ".", missing ? "error" : "success");
+        } catch (error) {
+          showStatus("The imported project data could not be applied.", "error");
+        }
+      };
+      reader.onerror = function () { showStatus("The selected file could not be read.", "error"); };
+      try {
+        reader.readAsText(file);
+      } catch (error) {
+        showStatus("The selected file could not be read.", "error");
+      }
+    }
+
+    /* The "Open session" button opens the native file picker so a project
+       file exported from the app can be selected straight from device
+       storage. If the picker cannot be opened (or the user cancels), the
+       original on-device session load still runs. */
+    var projectPicker = { settled: false, opened: false, timer: 0, focusHandler: null };
+
+    function markProjectPickerOpened() {
+      projectPicker.opened = true;
+    }
+
+    function clearProjectPickerWatchers() {
+      window.clearTimeout(projectPicker.timer);
+      projectPicker.timer = 0;
+      window.removeEventListener("blur", markProjectPickerOpened);
+      if (projectPicker.focusHandler) {
+        window.removeEventListener("focus", projectPicker.focusHandler);
+        projectPicker.focusHandler = null;
+      }
+    }
+
+    function fallBackToStoredSession() {
+      if (projectPicker.settled) return;
+      projectPicker.settled = true;
+      clearProjectPickerWatchers();
+      loadProject();
+    }
+
+    function openProjectPicker() {
+      clearProjectPickerWatchers();
+      projectPicker.settled = false;
+      projectPicker.opened = false;
+
+      window.addEventListener("blur", markProjectPickerOpened);
+      projectPicker.focusHandler = function () {
+        window.setTimeout(fallBackToStoredSession, 400);
+      };
+      window.addEventListener("focus", projectPicker.focusHandler);
+
+      // Safety net: if the WebView cannot show a file chooser at all,
+      // keep the previous "Open session" behaviour.
+      projectPicker.timer = window.setTimeout(function () {
+        if (!projectPicker.opened) fallBackToStoredSession();
+      }, 1600);
+
+      try {
+        projectImportInput.click();
+      } catch (error) {
+        fallBackToStoredSession();
       }
     }
 
@@ -2213,15 +2509,11 @@
           showStatus("The browser produced an empty export. Try a shorter clip or another browser.", "error");
           return;
         }
-        var url = URL.createObjectURL(blob);
-        var link = document.createElement("a");
-        link.href = url;
-        link.download = (media.name.replace(/\\.[^.]+$/, "") || "video-edit") + "-edit.webm";
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
-        window.setTimeout(function () { URL.revokeObjectURL(url); }, 60000);
-        showStatus("Visual export downloaded as WebM. Audio tracks are not mixed into this single-file browser export.", "success");
+        var fileName = (media.name.replace(/\.[^.]+$/, "") || "video-edit") + "-edit.webm";
+        saveBlobToDevice(blob, fileName, blob.type || "video/webm", function (saved, note) {
+          if (saved) showStatus("Visual export saved as " + fileName + ". Audio tracks are not mixed into this single-file browser export.", "success");
+          else showStatus(note || "The visual export could not be saved on this device.", "error");
+        });
       };
       var originalPlayhead = playheadTime;
       showStatus("Exporting the selected visual clip locally. Keep this tab open.", "");
@@ -2333,9 +2625,22 @@
       document.getElementById("undoButton").addEventListener("click", undo);
       document.getElementById("redoButton").addEventListener("click", redo);
       document.getElementById("saveProjectButton").addEventListener("click", saveProject);
-      document.getElementById("loadProjectButton").addEventListener("click", loadProject);
+      document.getElementById("loadProjectButton").addEventListener("click", openProjectPicker);
       document.getElementById("exportButton").addEventListener("click", exportVisualClip);
       document.getElementById("addTextButton").addEventListener("click", addTextOverlay);
+
+      /* Project file import: the hidden <input type="file"> above is opened
+         from the existing "Open session" button. */
+      projectImportInput.addEventListener("change", function (event) {
+        var input = event.target;
+        var file = input.files && input.files[0] ? input.files[0] : null;
+        try { input.value = ""; } catch (error) { /* ignore */ }
+        if (!file) return;
+        projectPicker.settled = true;
+        clearProjectPickerWatchers();
+        importProjectFile(file);
+      });
+
       document.querySelectorAll(".tab").forEach(function (tab) { tab.addEventListener("click", function () { setActiveTab(tab.dataset.tab); }); });
       previewVideo.addEventListener("error", function () { if (previewVideo.src) showStatus("This video cannot be played by the current browser codec.", "error"); });
       previewAudio.addEventListener("error", function () { if (previewAudio.src) showStatus("This audio cannot be played by the current browser codec.", "error"); });
