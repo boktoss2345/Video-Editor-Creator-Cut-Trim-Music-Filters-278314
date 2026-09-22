@@ -869,27 +869,6 @@
 
     /* ─────────────────────────────────────────────────────────────────────
        Android WebView safe FILE IMPORT / EXPORT helpers.
-       These helpers do not change any editor behaviour. They only replace
-       the plain "<a download>" step (which many Android WebViews ignore)
-       with a chain of fallbacks so that Export / Save session really
-       produce a file on the device.
-
-       OPTIONAL NATIVE BRIDGE
-       ----------------------
-       If the host WebView cannot save Blob URLs at all, expose a
-       JavascriptInterface named exactly "AndroidBridge" that contains:
-
-           @JavascriptInterface
-           public boolean saveBase64File(String base64, String mimeType, String fileName)
-
-       Register it with:
-           webView.addJavascriptInterface(new AndroidBridge(), "AndroidBridge");
-
-       The method must decode the Base64 payload and write it into the
-       public Downloads folder (or any app-private folder it prefers),
-       then return true on success, false on failure.
-       The page also looks for the same method on window.Android,
-       window.AndroidInterface, window.NativeBridge and window.AndroidFileSaver.
        ───────────────────────────────────────────────────────────────────── */
 
     var ANDROID_SAVER_METHODS = ["saveBase64File", "saveFileBase64", "downloadBase64File"];
@@ -974,14 +953,6 @@
         "-" + pad(now.getHours()) + pad(now.getMinutes()) + pad(now.getSeconds());
     }
 
-    /**
-     * Saves a Blob to the device. Tries, in order:
-     *   1. the optional Android JavascriptInterface
-     *   2. navigator.msSaveBlob (legacy WebView / IE)
-     *   3. an object URL plus <a download>
-     *   4. a data URL plus <a download>
-     * Never navigates away from the app and never opens a blank page.
-     */
     function saveBlobToDevice(blob, fileName, mimeType, callback) {
       var report = function (saved, note) {
         if (typeof callback === "function") callback(saved, note || "");
@@ -2185,10 +2156,6 @@
       }
     }
 
-    /* The "Open session" button opens the native file picker so a project
-       file exported from the app can be selected straight from device
-       storage. If the picker cannot be opened (or the user cancels), the
-       original on-device session load still runs. */
     var projectPicker = { settled: false, opened: false, timer: 0, focusHandler: null };
 
     function markProjectPickerOpened() {
@@ -2223,8 +2190,6 @@
       };
       window.addEventListener("focus", projectPicker.focusHandler);
 
-      // Safety net: if the WebView cannot show a file chooser at all,
-      // keep the previous "Open session" behaviour.
       projectPicker.timer = window.setTimeout(function () {
         if (!projectPicker.opened) fallBackToStoredSession();
       }, 1600);
@@ -2475,8 +2440,12 @@
         showStatus("This browser cannot create a local video export. Try a modern browser with MediaRecorder support.", "error");
         return;
       }
-      var resolution = window.confirm("Export at 1080p? Press Cancel for 720p.") ? 1080 : 720;
-      var fps = window.confirm("Use 30 FPS? Press Cancel for 24 FPS.") ? 30 : 24;
+      
+      // Removed window.confirm() prompts to prevent ugly "JavaScript" dialogs in Android WebView.
+      // Defaulting to 1080p and 30 FPS.
+      var resolution = 1080;
+      var fps = 30;
+      
       exportInProgress = true;
       var canvas = document.createElement("canvas");
       canvas.width = Math.round(resolution * 16 / 9);
