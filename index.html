@@ -1,4 +1,3 @@
-```html
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -6,18 +5,14 @@
 <meta name="viewport"
       content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 
-<title>Game</title>
+<title>Toca Boca Life Vacation</title>
 
 <style>
-    * {
-        margin: 0;
-        padding: 0;
-        box-sizing: border-box;
-    }
-
     html, body {
         width: 100%;
         height: 100%;
+        margin: 0;
+        padding: 0;
         overflow: hidden;
         background: #000;
     }
@@ -27,11 +22,10 @@
         top: 0;
         left: 0;
         width: 100vw;
-        height: 100dvh;
+        height: 100vh;
         border: 0;
         margin: 0;
         padding: 0;
-        display: block;
     }
 </style>
 </head>
@@ -40,23 +34,12 @@
 
 <iframe
     id="game"
-    src="https://www.madkidgames.com/full/toca-boca-life-pets"
-    allow="autoplay; fullscreen; gamepad"
-    allowfullscreen>
+    src="https://www.madkidgames.com/full/toca-boca-life-vacation"
+    allow="fullscreen; autoplay"
+    allowfullscreen
+    scrolling="no"
+    referrerpolicy="no-referrer-when-downgrade">
 </iframe>
-
-<script>
-    function resizeGame() {
-        document.getElementById("game").style.height =
-            window.innerHeight + "px";
-    }
-
-    window.addEventListener("resize", resizeGame);
-    window.addEventListener("orientationchange", resizeGame);
-
-    resizeGame();
-</script>
 
 </body>
 </html>
-```
