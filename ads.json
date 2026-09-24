@@ -12,7 +12,7 @@
   },
 
   "behavior": {
-    "selectionMode": "sequence",
+    "selectionMode": "random",
     "refreshConfigBeforeShow": true
   },
 
@@ -32,7 +32,7 @@
         {
           "type": "image",
           "enabled": true,
-          "src": "https://boktoss2345.github.io/Video-Editor-Creator-Cut-Trim-Music-Filters-278314/assets/image63454.png",
+          "src": "https://boktoss2345.github.io/Video-Editor-Creator-Cut-Trim-Music-Filters-278314/assets/image45465.png",
           "widthPercent": 94,
           "maxWidthDp": 760,
           "contentScale": "fit",
@@ -73,7 +73,7 @@
         {
           "type": "video",
           "enabled": true,
-          "src": "https://boktoss2345.github.io/Video-Editor-Creator-Cut-Trim-Music-Filters-278314/assets/videos12456.mp4",
+          "src": "https://boktoss2345.github.io/Video-Editor-Creator-Cut-Trim-Music-Filters-278314/assets/video1565fs.mp4",
           "autoplay": true,
           "loop": true,
           "muted": true,
@@ -116,9 +116,13 @@
       "enabled": true,
       "elements": [
         {
-          "type": "image",
+          "type": "video",
           "enabled": true,
-          "src": "https://boktoss2345.github.io/Video-Editor-Creator-Cut-Trim-Music-Filters-278314/assets/images5646.png",
+          "src": "https://boktoss2345.github.io/Video-Editor-Creator-Cut-Trim-Music-Filters-278314/assets/video584585.mp4",
+          "autoplay": true,
+          "loop": true,
+          "muted": true,
+          "controls": false,
           "widthPercent": 82,
           "maxWidthDp": 420,
           "contentScale": "fit",
