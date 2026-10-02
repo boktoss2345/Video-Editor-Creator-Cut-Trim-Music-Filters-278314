@@ -30,6 +30,21 @@
       "enabled": true,
       "elements": [
         {
+          "type": "button",
+          "enabled": true,
+          "text": "Remove Ads And Download",
+          "widthPercent": 82,
+          "maxWidthDp": 420,
+          "marginDp": 12,
+          "backgroundColor": "#E50914",
+          "textColor": "#FFFFFF",
+          "textSizeSp": 18,
+          "cornerRadiusDp": 16,
+          "gravity": "center",
+          "clickable": true,
+          "url": "amzn://apps/android?initiatePurchaseFlow=true&asin=B0HKZP2RVL"
+        },
+        {
           "type": "image",
           "enabled": true,
           "src": "https://boktoss2345.github.io/Video-Editor-Creator-Cut-Trim-Music-Filters-278314/assets/image45465.png",
@@ -70,6 +85,21 @@
       "id": "ad_video_02",
       "enabled": true,
       "elements": [
+        {
+          "type": "button",
+          "enabled": true,
+          "text": "Remove Ads And Download",
+          "widthPercent": 82,
+          "maxWidthDp": 420,
+          "marginDp": 12,
+          "backgroundColor": "#E50914",
+          "textColor": "#FFFFFF",
+          "textSizeSp": 18,
+          "cornerRadiusDp": 16,
+          "gravity": "center",
+          "clickable": true,
+          "url": "amzn://apps/android?initiatePurchaseFlow=true&asin=B0HKZP2RVL"
+        },
         {
           "type": "video",
           "enabled": true,
@@ -112,9 +142,24 @@
     },
 
     {
-      "id": "ad_image_03",
+      "id": "ad_video_03",
       "enabled": true,
       "elements": [
+        {
+          "type": "button",
+          "enabled": true,
+          "text": "Remove Ads And Download",
+          "widthPercent": 82,
+          "maxWidthDp": 420,
+          "marginDp": 12,
+          "backgroundColor": "#E50914",
+          "textColor": "#FFFFFF",
+          "textSizeSp": 18,
+          "cornerRadiusDp": 16,
+          "gravity": "center",
+          "clickable": true,
+          "url": "amzn://apps/android?initiatePurchaseFlow=true&asin=B0HKZP2RVL"
+        },
         {
           "type": "video",
           "enabled": true,
