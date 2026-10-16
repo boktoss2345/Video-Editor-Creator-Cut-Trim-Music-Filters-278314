@@ -38,7 +38,7 @@
           "cornerRadiusDp": 16,
           "gravity": "center",
           "clickable": true,
-          "url": "amzn://apps/android?initiatePurchaseFlow=true&asin=B0HKZP2RVL"
+          "url": "amzn://apps/android?initiatePurchaseFlow=true&asin=B0HLSXFX3V"
         },
         {
           "type": "video",
@@ -53,7 +53,7 @@
           "contentScale": "fit",
           "cornerRadiusDp": 24,
           "clickable": true,
-          "url": "amzn://apps/android?initiatePurchaseFlow=true&asin=B0HKZP2RVL"
+          "url": "amzn://apps/android?initiatePurchaseFlow=true&asin=B0HLSXFX3V"
         },
         {
           "type": "button",
@@ -68,7 +68,7 @@
           "cornerRadiusDp": 16,
           "gravity": "center",
           "clickable": true,
-          "url": "amzn://apps/android?initiatePurchaseFlow=true&asin=B0HKZP2RVL"
+          "url": "amzn://apps/android?initiatePurchaseFlow=true&asin=B0HLSXFX3V"
         },
         {
           "type": "countdown",
@@ -156,7 +156,7 @@
           "cornerRadiusDp": 16,
           "gravity": "center",
           "clickable": true,
-          "url": "amzn://apps/android?initiatePurchaseFlow=true&asin=B0HKZP2RVL"
+          "url": "amzn://apps/android?initiatePurchaseFlow=true&asin=B0HLSXFX3V"
         },
         {
           "type": "image",
@@ -167,7 +167,7 @@
           "contentScale": "fit",
           "cornerRadiusDp": 20,
           "clickable": true,
-          "url": "amzn://apps/android?initiatePurchaseFlow=true&asin=B0HL5DWBJL"
+          "url": "amzn://apps/android?initiatePurchaseFlow=true&asin=B0HLSXFX3V"
         },
         {
           "type": "button",
@@ -182,7 +182,7 @@
           "cornerRadiusDp": 16,
           "gravity": "center",
           "clickable": true,
-          "url": "amzn://apps/android?initiatePurchaseFlow=true&asin=B0HKZP2RVL"
+          "url": "amzn://apps/android?initiatePurchaseFlow=true&asin=B0HLSXFX3V"
         },
         {
           "type": "countdown",
